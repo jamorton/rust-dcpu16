@@ -137,7 +137,7 @@ fn step(cpu: cpu_state) {
             cpu.sp -= 1u16;
             cpu.mem[cpu.sp] = next_pc(cpu);
             cpu.pc = b as u16;
-            cpu.cycles += 1u
+            cpu.cycles += 2u
           }
           _ { error("invalid non-basic instruction"); }
         }
@@ -161,7 +161,7 @@ fn step(cpu: cpu_state) {
           IFN { res = (a != b) as uint; 2u }
           IFG { res = (a > b) as uint; 2u }
           IFB { res = ((a & b) != 0u) as uint; 2u }
-          _   { error("Invalid basic instruction"); 0u }
+          _ { 0u }
         };
 
         // special logic
@@ -176,7 +176,7 @@ fn step(cpu: cpu_state) {
           IFE | IFN | IFG | IFB {
             cpu.pc += 1u16 - (res as u16); // if res is true (1) we don't skip
           }
-          NBI { }
+          _ { }
         }
     }
 }
