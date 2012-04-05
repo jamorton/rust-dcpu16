@@ -215,8 +215,6 @@ fn main() {
     cpu.mem[3] = 0x1000 as u16;
     cpu.mem[4] = 0x0020 as u16;
 
-    io::println(#fmt("mem: %x\n", cpu.mem[0x1000] as uint));
-
     step(cpu);
     dump_state(cpu);
 
