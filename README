@@ -1,3 +1,21 @@
 An emulator for Notch's dcpu-16 architecture, in Rust (http://www.github.com/mozilla/rust)
 
 See 0x10c.com for information on dcpu-16.
+
+HOW TO USE THIS EMULATOR:
+
+    git clone https://github.com/mozilla/rust.git rust
+    cd rust
+    ./configure
+    make
+    make install
+
+    cd ..
+    git clone https://github.com/Jonanin/rust-dcpu16.git rust-dcpu16
+    cd rust-dcpu16
+    rustc emu.rs
+    ./emu example.rom
+    
+
+    
+    
