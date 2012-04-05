@@ -187,17 +187,17 @@ fn step(cpu: cpu_state) {
 }
 
 fn dump_header() {
-    io::println(" A     B     C     X     Y     Z     I     J     PC    SP    O");
-    io::println("----------------------------------------------------------------");
+    io::println(" A     B     C     X     Y     Z     I     J     PC    SP    O   cycles");
+    io::println("-----------------------------------------------------------------------");
 }
 
 fn dump_state(cpu: cpu_state) {
     io::println(#fmt(
-        "%04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x",
+        "%04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x  %04x   %u",
         cpu.regs[0] as uint, cpu.regs[1] as uint, cpu.regs[2] as uint,
         cpu.regs[3] as uint, cpu.regs[4] as uint, cpu.regs[5] as uint,
         cpu.regs[6] as uint, cpu.regs[7] as uint, cpu.pc as uint,
-        cpu.sp as uint, cpu.o as uint
+        cpu.sp as uint, cpu.o as uint, cpu.cycles
     ));
 }
 
@@ -240,6 +240,9 @@ fn main() {
     // SET PC, loop
     cpu.mem[14] = 0x7dc1 as u16;
     cpu.mem[15] = 10u16;
+
+    // STOP
+    cpu.mem[16] = 0x0000 as u16;
 
     while !cpu.stop {
         dump_state(cpu);
