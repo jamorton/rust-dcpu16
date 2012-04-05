@@ -39,13 +39,8 @@ enum special_opcode {
 }
 
 // Ew.
-fn basic_opcode(v: uint) -> basic_opcode {
-    unsafe { unsafe::reinterpret_cast(v) }
-}
-
-fn special_opcode(v: uint) -> special_opcode {
-    unsafe { unsafe::reinterpret_cast(v) }
-}
+fn basic_op(v: uint)   -> basic_opcode   {unsafe{unsafe::reinterpret_cast(v)}}
+fn special_op(v: uint) -> special_opcode {unsafe{unsafe::reinterpret_cast(v)}}
 
 fn new_cpu_state() -> cpu_state {
     {
@@ -59,7 +54,7 @@ fn new_cpu_state() -> cpu_state {
 }
 
 fn error(out: str) {
-    io::print("dcpu16: emu error: ");
+    io::print("rust-dcpu16 emu error: ");
     io::println(out);
 }
 
@@ -69,7 +64,16 @@ fn next_pc(cpu: cpu_state) -> u16 {
     val
 }
 
-fn get_val(cpu: cpu_state, key: u16) -> u16 {
+enum value {
+    value_literal(u16),
+    value_reg(u16),
+    value_mem(u16),
+    value_sp,
+    value_pc,
+    value_o,
+}
+
+fn new_value(cpu: cpu_state, key: u16) -> value {
     let k = key as int;
 
     cpu.cycles += alt k {
@@ -78,51 +82,57 @@ fn get_val(cpu: cpu_state, key: u16) -> u16 {
     };
 
     alt k {
-      0x00 to 0x07 { cpu.regs[k] }
-      0x08 to 0x0F { cpu.mem[cpu.regs[k - 0x8]] }
-      0x10 to 0x17 { cpu.mem[cpu.regs[k - 0x10] + next_pc(cpu)] }
-      0x18 { let r = cpu.mem[cpu.sp]; cpu.sp += 1u16; r }
-      0x19 { cpu.mem[cpu.sp] }
-      0x1a { cpu.sp -= 1u16; cpu.mem[cpu.sp] }
-      0x1b { cpu.sp }
-      0x1c { cpu.pc }
-      0x1d { cpu.o  }
-      0x1e { cpu.mem[next_pc(cpu)] }
-      0x1f { next_pc(cpu) }
-      0x20 to 0x3f { key - 0x20u16 }
-      _ { error("get_val: invalid value"); 0u16 }
+      0x00 to 0x07 { value_reg(key) }
+      0x08 to 0x0F { value_mem(cpu.regs[k - 0x8]) }
+      0x10 to 0x17 { value_mem(cpu.regs[k - 0x10] + next_pc(cpu)) }
+      0x18 { let r = value_mem(cpu.sp); cpu.sp += 1u16; r }
+      0x19 { value_mem(cpu.sp) }
+      0x1a { cpu.sp -= 1u16; value_mem(cpu.sp) }
+      0x1b { value_sp }
+      0x1c { value_pc }
+      0x1d { value_o  }
+      0x1e { value_mem(next_pc(cpu)) }
+      0x1f { value_literal(next_pc(cpu)) }
+      0x20 to 0x3f { value_literal(key - 0x20u16) }
+      _ { error("get_val: invalid value"); fail; }
     }
 }
 
-fn set_val(cpu: cpu_state, key: u16, v: u16) {
-    let k = key as int;
-    alt k {
-      0x00 to 0x07 { cpu.regs[k] = v; }
-      0x08 to 0x0f { cpu.mem[cpu.regs[k - 0x08]] = v; }
-      0x10 to 0x17 { cpu.mem[cpu.regs[k - 0x10] + next_pc(cpu)] = v; }
-      0x18 { cpu.mem[cpu.sp] = v; cpu.sp += 1u16; }
-      0x19 { cpu.mem[cpu.sp] = v; }
-      0x1a { cpu.sp -= 1u16; cpu.mem[cpu.sp] = v; }
-      0x1b { cpu.sp = v; }
-      0x1c { cpu.pc = v; }
-      0x1d { cpu.o = v; }
-      0x1e to 0x3f { error("set_val: attempt to set to a literal"); }
-      _ { error("set_val: invalid value"); }
+fn get_value(cpu: cpu_state, v: value) -> u16 {
+    alt v {
+      value_reg(t) { cpu.regs[t] }
+      value_mem(t) { cpu.mem[t] }
+      value_sp { cpu.sp }
+      value_pc { cpu.pc }
+      value_o  { cpu.o  }
+      value_literal(t) { t }
+    }
+}
+                       
+fn set_value(cpu: cpu_state, targ: value, v: u16) {
+    alt targ {
+      value_reg(t) { cpu.regs[t] = v; }
+      value_mem(t) { cpu.mem[t] = v; }
+      value_sp { cpu.sp = v; }
+      value_pc { cpu.pc = v; }
+      value_o { cpu.o = v; }
+      value_literal(t) { error("set_val: attempt to set a literal"); }
     }
 }
 
 fn step(cpu: cpu_state) {
 
     let word = next_pc(cpu);
-    let op   = basic_opcode((word & 0b0000000000001111u16) as uint);
-    let ak   =              (word & 0b0000001111110000u16) >> 4u16;
-    let bk   =              (word & 0b1111110000000000u16) >> 10u16;
-    let a    = get_val(cpu, ak) as uint;
-    let b    = get_val(cpu, bk) as uint;
+    let op        =  basic_op((word & 0b0000000000001111u16) as uint);
+    let av   = new_value(cpu, (word & 0b0000001111110000u16) >> 4u16);
+    let bv   = new_value(cpu, (word & 0b1111110000000000u16) >> 10u16);
+
+    let a    = get_value(cpu, av) as uint;
+    let b    = get_value(cpu, bv) as uint;
 
     // Non-basic instructions
     if op == NBI {
-        alt special_opcode(a) {
+        alt special_op(a) {
           JSR { // JSR
             cpu.sp -= 1u16;
             cpu.mem[cpu.sp] = next_pc(cpu);
@@ -158,10 +168,10 @@ fn step(cpu: cpu_state) {
         alt op {
           ADD | SUB | MUL | DIV | SHL | SHR  {
             cpu.o = (res >> 16) as u16;
-            set_val(cpu, ak, (res & 0xFFFFu) as u16);
+            set_value(cpu, av, (res & 0xFFFFu) as u16);
           }
           SET | MOD |  AND | BOR | XOR {
-            set_val(cpu, ak, (res & 0xFFFFu) as u16);
+            set_value(cpu, av, (res & 0xFFFFu) as u16);
           }
           IFE | IFN | IFG | IFB {
             cpu.pc += 1u16 - (res as u16); // if res is true (1) we don't skip
@@ -190,6 +200,31 @@ fn main() {
     dump_header();
     
     let cpu = new_cpu_state();
-    cpu.regs[0] = 0xFFFFu16;
+
     dump_state(cpu);
+
+    // SET A, 0x30
+    cpu.mem[0] = 0x7c01 as u16;
+    cpu.mem[1] = 0x0030 as u16;
+
+    step(cpu);
+    dump_state(cpu);
+
+    // SET [0x1000], 0x20
+    cpu.mem[2] = 0x7de1 as u16;
+    cpu.mem[3] = 0x1000 as u16;
+    cpu.mem[4] = 0x0020 as u16;
+
+    io::println(#fmt("mem: %x\n", cpu.mem[0x1000] as uint));
+
+    step(cpu);
+    dump_state(cpu);
+
+    // SUB A, [0x1000]
+    cpu.mem[5] = 0x7803 as u16;
+    cpu.mem[6] = 0x1000 as u16;
+    
+    step(cpu);
+    dump_state(cpu);
+
 }
