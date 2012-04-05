@@ -8,7 +8,8 @@ type cpu_state = {
     mut sp: u16,
     mut o:  u16,
     mem:    [mut u16],
-    mut cycles: uint
+    mut cycles: uint,
+    mut stop: bool
 };
 
 // Basic instruction
@@ -35,7 +36,8 @@ enum basic_opcode {
 // Non basic instruction
 // format: aaaaaaoooooo0000
 enum special_opcode {
-    JSR = 1 // push pc to stack, set pc to a
+    EXT, // extension, reserved
+    JSR  // push pc to stack, set pc to a
 }
 
 // Ew.
@@ -49,7 +51,8 @@ fn new_cpu_state() -> cpu_state {
         mut     sp: 0u16,
         mut      o: 0u16,
                mem: vec::to_mut(vec::from_elem(0x10000u, 0u16)),
-        mut cycles: 0u
+        mut cycles: 0u,
+        mut   stop: false
     }
 }
 
@@ -131,9 +134,11 @@ fn step(cpu: cpu_state) {
     let b = get_value(cpu, bv) as uint;
 
     // Non-basic instructions
-    if op == NBI {
-        alt special_op(a) {
-          JSR { // JSR
+    if op == NBI {        
+        alt special_op(((word & 0b0000001111110000u16) >> 4u16) as uint) {
+          // use the word 0x0000 this as a 'stop' command
+          EXT { cpu.stop = true }
+          JSR {
             cpu.sp -= 1u16;
             cpu.mem[cpu.sp] = next_pc(cpu);
             cpu.pc = b as u16;
@@ -201,28 +206,44 @@ fn main() {
     
     let cpu = new_cpu_state();
 
-    dump_state(cpu);
-
     // SET A, 0x30
     cpu.mem[0] = 0x7c01 as u16;
     cpu.mem[1] = 0x0030 as u16;
-
-    step(cpu);
-    dump_state(cpu);
 
     // SET [0x1000], 0x20
     cpu.mem[2] = 0x7de1 as u16;
     cpu.mem[3] = 0x1000 as u16;
     cpu.mem[4] = 0x0020 as u16;
 
-    step(cpu);
-    dump_state(cpu);
-
     // SUB A, [0x1000]
     cpu.mem[5] = 0x7803 as u16;
     cpu.mem[6] = 0x1000 as u16;
-    
-    step(cpu);
-    dump_state(cpu);
 
+    // SET I, 10
+    cpu.mem[7] = 0xa861 as u16;
+
+    // SET A, 0x2000
+    cpu.mem[8] = 0x7c01 as u16;
+    cpu.mem[9] = 0x2000 as u16;
+
+    // loop:
+    // SET [0x2000+I], [A]
+    cpu.mem[10] = 0x2161 as u16;
+    cpu.mem[11] = 0x2000 as u16;
+
+    // SUB I, 1
+    cpu.mem[12] = 0x8463 as u16;
+
+    // IFN I, 0
+    cpu.mem[13] = 0x806d as u16;
+
+    // SET PC, loop
+    cpu.mem[14] = 0x7dc1 as u16;
+    cpu.mem[15] = 10u16;
+
+    while !cpu.stop {
+        dump_state(cpu);
+        step(cpu);
+    }
+    
 }
