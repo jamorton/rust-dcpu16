@@ -3,13 +3,13 @@
 // See: dcpu-16 specification; 0x10c.com/doc/dcpu-16.txt
 
 type cpu_state = {
-    regs:   [mut u16],
-    mut pc: u16,
-    mut sp: u16,
-    mut o:  u16,
-    mem:    [mut u16],
+    regs:       [mut u16],
+    mut pc:     u16,
+    mut sp:     u16,
+    mut o:      u16,
+    mem:        [mut u16],
     mut cycles: uint,
-    mut stop: bool
+    mut stop:   bool
 };
 
 // Basic instruction
@@ -201,48 +201,68 @@ fn dump_state(cpu: cpu_state) {
     ));
 }
 
+// A rom file is an ascii text file containing raw cpu instructions.
+// All text in the file is ignored except for hexadecimal characters
+// found between a single pair of {{ and }}.
+// example rom file:
+//    This program sets A to 0x30
+//    {{ 7c01 0030 }}
+//    more text that is ignored
+fn load_rom(cpu: cpu_state, filename: str) {
+    let input = result::get(io::read_whole_file_str(filename));
+
+    let start = str::find_str(input, "{{");
+    let end   = str::find_str(input, "}}");
+
+    if option::is_none(start) || option::is_none(end)  {
+        error("invalid rom file");
+        ret;
+    }
+
+    let s = option::get(start);
+    let e = option::get(end);
+
+    if s > e {
+        error("invalid rom file");
+        ret;
+    }
+
+    let data = str::slice(input, s + 2u, e);
+    let mut chars : [u8] = [];
+
+    for str::each(data) {|c|
+        alt c {
+          48u8 to 57u8 { vec::push(chars, c - 48u8); }
+          65u8 to 70u8 { vec::push(chars, c - 65u8 + 10u8); }
+          97u8 to 102u8 { vec::push(chars, c - 97u8 + 10u8); }
+          _ { }
+        }
+    }
+
+    if vec::len(chars) % 4u != 0u {
+        error("invalid rom file, invalid number of bytes");
+        ret;
+    }
+
+    let max = vec::len(chars) / 4u;
+    let mut i = 0u;
+    while i < max {
+        let k = (i * 4u) as int;
+        cpu.mem[i] = (
+            (chars[k]   as uint << 12u) |
+            (chars[k+1] as uint << 8u)  |
+            (chars[k+2] as uint << 4u)  |
+            (chars[k+3] as uint )
+        ) as u16;
+        i += 1u;
+    }
+}
+
 fn main() {
-    dump_header();
     
+    dump_header();
     let cpu = new_cpu_state();
-
-    // SET A, 0x30
-    cpu.mem[0] = 0x7c01 as u16;
-    cpu.mem[1] = 0x0030 as u16;
-
-    // SET [0x1000], 0x20
-    cpu.mem[2] = 0x7de1 as u16;
-    cpu.mem[3] = 0x1000 as u16;
-    cpu.mem[4] = 0x0020 as u16;
-
-    // SUB A, [0x1000]
-    cpu.mem[5] = 0x7803 as u16;
-    cpu.mem[6] = 0x1000 as u16;
-
-    // SET I, 10
-    cpu.mem[7] = 0xa861 as u16;
-
-    // SET A, 0x2000
-    cpu.mem[8] = 0x7c01 as u16;
-    cpu.mem[9] = 0x2000 as u16;
-
-    // loop:
-    // SET [0x2000+I], [A]
-    cpu.mem[10] = 0x2161 as u16;
-    cpu.mem[11] = 0x2000 as u16;
-
-    // SUB I, 1
-    cpu.mem[12] = 0x8463 as u16;
-
-    // IFN I, 0
-    cpu.mem[13] = 0x806d as u16;
-
-    // SET PC, loop
-    cpu.mem[14] = 0x7dc1 as u16;
-    cpu.mem[15] = 10u16;
-
-    // STOP
-    cpu.mem[16] = 0x0000 as u16;
+    load_rom(cpu, "example.rom");
 
     while !cpu.stop {
         dump_state(cpu);
