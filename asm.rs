@@ -146,15 +146,38 @@ fn compile_line(l:str) -> result<[u16],str> {
 
 fn compile_file(filename: str)
 {
-    
+    let r = io::file_reader(filename);
+    if result::is_failure(r) {
+        io::println("could not open file");
+    }
+
+    let mut out : [u16] = [];
+    let mut n = 0u;
+    let rdr = result::get(r);
+    while !rdr.eof() {
+        n += 1u;
+        let line = rdr.read_line();
+        let res = compile_line(line);
+        
+        if result::is_failure(res) { io::println(#fmt("Compile error: %s on line %u", result::get_err(res), n)); ret; }
+        for result::get(res).each { |t| vec::push(out, t); }
+    }
+
+    io::println("{{");
+
+    for out.each { |num|
+        let mut o = uint::to_str(num as uint, 16u);
+        let mut len = str::len(o);
+        while len < 4u {
+            o = "0" + o;
+            len += 1u
+        }
+        io::println(o);
+    }
+    io::println("}}");
 }
 
-
-
 fn main(args: [str]) {
-    let v = compile_line(" SET [0x1000], 0x20 ");
-    if result::is_failure(v) { io::println(result::get_err(v)); }
-    else {
-        for result::get(v).each { |t| io::println(#fmt("%x", t as uint)) };
-    }
+    compile_file(args[1]);
+
 }
