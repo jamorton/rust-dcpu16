@@ -1,0 +1,4 @@
+*.dSYM
+test
+emu
+*.o
