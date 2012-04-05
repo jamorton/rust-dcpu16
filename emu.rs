@@ -258,11 +258,16 @@ fn load_rom(cpu: cpu_state, filename: str) {
     }
 }
 
-fn main() {
+fn main(args: [str]) {
+
+    if vec::len(args) != 2u {
+        io::println("Usage:");
+        io::println("  ./emu [rom file]");
+    }
     
     dump_header();
     let cpu = new_cpu_state();
-    load_rom(cpu, "example.rom");
+    load_rom(cpu, args[1]);
 
     while !cpu.stop {
         dump_state(cpu);
