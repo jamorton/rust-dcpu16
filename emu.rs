@@ -59,8 +59,8 @@ fn error(out: str) {
 }
 
 fn next_pc(cpu: cpu_state) -> u16 {
-    let val = cpu.mem[cpu.sp];
-    cpu.sp += 1u16;
+    let val = cpu.mem[cpu.pc];
+    cpu.pc += 1u16;
     val
 }
 
