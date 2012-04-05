@@ -100,11 +100,11 @@ fn new_value(cpu: cpu_state, key: u16) -> value {
 
 fn get_value(cpu: cpu_state, v: value) -> u16 {
     alt v {
-      value_reg(t) { cpu.regs[t] }
-      value_mem(t) { cpu.mem[t] }
-      value_sp { cpu.sp }
-      value_pc { cpu.pc }
-      value_o  { cpu.o  }
+      value_reg(t)     { cpu.regs[t] }
+      value_mem(t)     { cpu.mem[t] }
+      value_sp         { cpu.sp }
+      value_pc         { cpu.pc }
+      value_o          { cpu.o  }
       value_literal(t) { t }
     }
 }
@@ -113,9 +113,9 @@ fn set_value(cpu: cpu_state, targ: value, v: u16) {
     alt targ {
       value_reg(t) { cpu.regs[t] = v; }
       value_mem(t) { cpu.mem[t] = v; }
-      value_sp { cpu.sp = v; }
-      value_pc { cpu.pc = v; }
-      value_o { cpu.o = v; }
+      value_sp     { cpu.sp = v; }
+      value_pc     { cpu.pc = v; }
+      value_o      { cpu.o = v; }
       value_literal(t) { error("set_val: attempt to set a literal"); }
     }
 }
@@ -123,12 +123,12 @@ fn set_value(cpu: cpu_state, targ: value, v: u16) {
 fn step(cpu: cpu_state) {
 
     let word = next_pc(cpu);
-    let op        =  basic_op((word & 0b0000000000001111u16) as uint);
+    let op   =       basic_op((word & 0b0000000000001111u16) as uint);
     let av   = new_value(cpu, (word & 0b0000001111110000u16) >> 4u16);
     let bv   = new_value(cpu, (word & 0b1111110000000000u16) >> 10u16);
 
-    let a    = get_value(cpu, av) as uint;
-    let b    = get_value(cpu, bv) as uint;
+    let a = get_value(cpu, av) as uint;
+    let b = get_value(cpu, bv) as uint;
 
     // Non-basic instructions
     if op == NBI {
