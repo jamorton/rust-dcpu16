@@ -214,37 +214,34 @@ fn load_rom(cpu: cpu_state, filename: str) {
     let start = str::find_str(input, "{{");
     let end   = str::find_str(input, "}}");
 
-    if option::is_none(start) || option::is_none(end)  {
+    if start.is_none() || end.is_none()  {
         error("invalid rom file");
         ret;
     }
 
-    let s = option::get(start);
-    let e = option::get(end);
-
-    if s > e {
+    if start.get() > end.get() {
         error("invalid rom file");
         ret;
     }
 
-    let data = str::slice(input, s + 2u, e);
+    let data = str::slice(input, start.get() + 2u, end.get());
     let mut chars : [u8] = [];
 
-    for str::each(data) {|c|
+    for data.each() {|c|
         alt c {
-          48u8 to 57u8 { vec::push(chars, c - 48u8); }
-          65u8 to 70u8 { vec::push(chars, c - 65u8 + 10u8); }
+          48u8 to 57u8  { vec::push(chars, c - 48u8); }
+          65u8 to 70u8  { vec::push(chars, c - 65u8 + 10u8); }
           97u8 to 102u8 { vec::push(chars, c - 97u8 + 10u8); }
           _ { }
         }
     }
 
-    if vec::len(chars) % 4u != 0u {
+    if chars.len() % 4u != 0u {
         error("invalid rom file, invalid number of bytes");
         ret;
     }
 
-    let max = vec::len(chars) / 4u;
+    let max = chars.len() / 4u;
     let mut i = 0u;
     while i < max {
         let k = (i * 4u) as int;
@@ -260,7 +257,7 @@ fn load_rom(cpu: cpu_state, filename: str) {
 
 fn main(args: [str]) {
 
-    if vec::len(args) != 2u {
+    if args.len() != 2u {
         io::println("Usage:");
         io::println("  ./emu [rom file]");
     }
