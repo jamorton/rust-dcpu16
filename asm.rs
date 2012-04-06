@@ -80,9 +80,12 @@ fn make_val(part:str) -> result<[u16], str> {
 
     // '0x1000'
     ret result::chain(parse_num(part)) { |t|
-        result::ok([0x1Fu16, t])
+        if t <= 0x1Fu16 {
+            result::ok([0x20u16 + t])
+        } else {
+            result::ok([0x1Fu16, t])
+        }
     }
-
 }
 
 fn get_op(cmd:str) -> result<u16,str> {
