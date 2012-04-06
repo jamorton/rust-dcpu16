@@ -1,29 +1,31 @@
 
 import io::reader_util;
 import result::result;
+import result::err;
+import result::extensions;
 
 fn parse_num(p:str) -> result<u16, str> {
     if str::find_str(p, "0x").is_none() {
-        ret result::err("expecting 0x");
+        ret err("expecting 0x");
     }
     let mut buf : [u8] = [];
     for str::replace(p, "0x", "").each {|t| vec::push(buf, t as u8); };
     let num = uint::parse_buf(buf, 16u);
     if num.is_none() {
-        ret result::err("invalid number");
+        ret err("invalid number");
     }
     if num.get() > 0xFFFFu {
-        ret result::err("constant too large");
+        ret err("constant too large");
     }
     ret result::ok(num.get() as u16);
 }
 
 fn parse_reg(p:u8) -> result<u16, str> {
-    alt p as char {
-      'A' { result::ok(0u16) } 'B' { result::ok(1u16) } 'C' { result::ok(2u16) } 'X' { result::ok(3u16) }
-      'Y' { result::ok(4u16) } 'Z' { result::ok(5u16) } 'I' { result::ok(6u16) } 'J' { result::ok(7u16) }
-      _   { result::err("invalid register name") }
-    }
+    result::ok(alt p as char {
+      'A' { 0 } 'B' { 1 } 'C' { 2} 'X' { 3 }
+      'Y' { 4 } 'Z' { 5 } 'I' { 6 } 'J' { 7 }
+      _   { ret err("invalid register name"); }
+    } as u16)
 }
 
 fn make_val(part:str) -> result<[u16], str> {
@@ -35,11 +37,11 @@ fn make_val(part:str) -> result<[u16], str> {
       _ { }
     }
 
-    if str::len(part) == 1u {
+    if part.len() == 1u {
         ret result::chain(parse_reg(part[0])) { |t|  result::ok([t]) };
     }
 
-    if str::len(part) == 3u && part[0] == ('[' as u8) && part[2] == (']' as u8) {
+    if part.len() == 3u && part[0] == ('[' as u8) && part[2] == (']' as u8) {
         ret result::chain(parse_reg(part[1])) { |t| result::ok([t + 0x08u16]) };
     }
 
@@ -47,18 +49,18 @@ fn make_val(part:str) -> result<[u16], str> {
         let v = str::replace(str::replace(part, "[", ""), "]", "").split_char('+');
         let (reg, word) = if str::find_str(v[0], "0x").is_none() {
             if (str::len(v[0]) != 1u) {
-                ret result::err("expected register");
+                ret err("expected register");
             }
             (parse_reg(v[0][0]), parse_num(v[1]))
         } else {
             if (str::len(v[1]) != 1u) {
-                ret result::err("expected register");
+                ret err("expected register");
             }
             (parse_reg(v[1][0]), parse_num(v[0]))
         };
-        if result::is_failure(reg) { ret result::err(result::get_err(reg)); }
-        if result::is_failure(word) { ret result::err(result::get_err(word)); }
-        ret result::ok([result::get(reg) + 0x10u16, result::get(word)]);
+        if reg.is_failure() { ret err(reg.get_err()); }
+        if word.is_failure() { ret err(word.get_err()); }
+        ret result::ok([reg.get() + 0x10u16, word.get()]);
     }
 
     if !str::find_char(part, '[').is_none() {
@@ -90,7 +92,7 @@ fn get_op(cmd:str) -> result<u16,str> {
       "IFN" { 13 }
       "IFG" { 14 }
       "IFB" { 15 }
-      _     { ret result::err("invalid opcode"); }
+      _     { ret err("invalid opcode"); }
     } as u16)
 }
 
@@ -113,19 +115,20 @@ fn compile_line(l:str) -> result<[u16],str> {
         let mut word : u16 = 0u16;
         let mut final : [u16] = [];
         let k = get_op(cmd);
-        if result::is_failure(k) { ret result::err(result::get_err(k)); }
-        word |= result::get(k);
+        if k.is_failure() { ret err(k.get_err()); }
+        word |= k.get();
         
         if args.len() != 2u {
-            ret result::err("wrong number of arguments");
+            ret err("wrong number of arguments");
         }
+        
         let a = make_val(args[0]);
         let b = make_val(args[1]);
-        if result::is_failure(a) { ret result::err(result::get_err(a)); }
-        if result::is_failure(b) { ret result::err(result::get_err(b)); }
+        if a.is_failure() { ret err(a.get_err()); }
+        if b.is_failure() { ret err(b.get_err()); }
 
-        let av = result::get(a);
-        let bv = result::get(b);
+        let av = a.get();
+        let bv = b.get();
 
         word |= (av[0] & 0b111111u16) << 4u16;
         word |= (bv[0] & 0b111111u16) << 10u16;
@@ -141,19 +144,19 @@ fn compile_line(l:str) -> result<[u16],str> {
         ret result::ok(final);
     }
     
-    ret result::err("not implemented");
+    ret err("not implemented");
 }
 
 fn compile_file(filename: str)
 {
     let r = io::file_reader(filename);
-    if result::is_failure(r) {
+    if r.is_failure() {
         io::println("could not open file");
     }
 
     let mut out : [u16] = [];
     let mut n = 0u;
-    let rdr = result::get(r);
+    let rdr = r.get();
     while !rdr.eof() {
         n += 1u;
         let line = rdr.read_line();
@@ -163,16 +166,13 @@ fn compile_file(filename: str)
         for result::get(res).each { |t| vec::push(out, t); }
     }
 
+    io::println("rust-dcpu-16 generated ROM");
     io::println("{{");
 
     for out.each { |num|
-        let mut o = uint::to_str(num as uint, 16u);
-        let mut len = str::len(o);
-        while len < 4u {
-            o = "0" + o;
-            len += 1u
-        }
-        io::println(o);
+        let mut num = uint::to_str(num as uint, 16u);
+        iter::repeat(4u - num.len()) {|| num = "0" + num};
+        io::println("  " + num);
     }
     io::println("}}");
 }
