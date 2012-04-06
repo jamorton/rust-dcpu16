@@ -4,6 +4,7 @@ import result::result;
 import result::err;
 import result::extensions;
 
+// Parse a hexadecimal number
 fn parse_num(p:str) -> result<u16, str> {
     if str::find_str(p, "0x").is_none() {
         ret err("expecting 0x");
@@ -20,14 +21,16 @@ fn parse_num(p:str) -> result<u16, str> {
     ret result::ok(num.get() as u16);
 }
 
+// return the ID associated with a register
 fn parse_reg(p:u8) -> result<u16, str> {
     result::ok(alt p as char {
-      'A' { 0 } 'B' { 1 } 'C' { 2} 'X' { 3 }
+      'A' { 0 } 'B' { 1 } 'C' { 2 } 'X' { 3 }
       'Y' { 4 } 'Z' { 5 } 'I' { 6 } 'J' { 7 }
       _   { ret err("invalid register name"); }
     } as u16)
 }
 
+// Parse an argument to an opcode
 fn make_val(part:str) -> result<[u16], str> {
 
     alt part {
@@ -37,14 +40,17 @@ fn make_val(part:str) -> result<[u16], str> {
       _ { }
     }
 
+    // 'A'
     if part.len() == 1u {
         ret result::chain(parse_reg(part[0])) { |t|  result::ok([t]) };
     }
 
+    // '[A]'
     if part.len() == 3u && part[0] == ('[' as u8) && part[2] == (']' as u8) {
         ret result::chain(parse_reg(part[1])) { |t| result::ok([t + 0x08u16]) };
     }
 
+    // '[0x1000 + a]'
     if !str::find_char(part, '+').is_none() {
         let v = str::replace(str::replace(part, "[", ""), "]", "").split_char('+');
         let (reg, word) = if str::find_str(v[0], "0x").is_none() {
@@ -63,12 +69,14 @@ fn make_val(part:str) -> result<[u16], str> {
         ret result::ok([reg.get() + 0x10u16, word.get()]);
     }
 
+    // '[0x1000]'
     if !str::find_char(part, '[').is_none() {
         ret result::chain(parse_num(str::replace(str::replace(part, "[", ""), "]", ""))) { |t|
             result::ok([0x1Eu16, t])
         }
     }
 
+    // '0x1000'
     ret result::chain(parse_num(part)) { |t|
         result::ok([0x1Fu16, t])
     }
@@ -157,23 +165,29 @@ fn compile_file(filename: str)
     let mut out : [u16] = [];
     let mut n = 0u;
     let rdr = r.get();
+    
     while !rdr.eof() {
         n += 1u;
         let line = rdr.read_line();
         let res = compile_line(line);
+
+        if res.is_failure() {
+            io::println(#fmt("Compile error: %s on line %u", res.get_err(), n));
+            ret;
+        }
         
-        if result::is_failure(res) { io::println(#fmt("Compile error: %s on line %u", result::get_err(res), n)); ret; }
-        for result::get(res).each { |t| vec::push(out, t); }
+        for res.get().each { |t| vec::push(out, t); }
     }
 
     io::println("rust-dcpu-16 generated ROM");
     io::println("{{");
 
     for out.each { |num|
-        let mut num = uint::to_str(num as uint, 16u);
-        iter::repeat(4u - num.len()) {|| num = "0" + num};
-        io::println("  " + num);
+        let mut hex = uint::to_str(num as uint, 16u);
+        iter::repeat(4u - hex.len()) {|| hex = "0" + hex};
+        io::println("  " + hex);
     }
+    
     io::println("}}");
 }
 
