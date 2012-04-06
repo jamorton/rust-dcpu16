@@ -122,7 +122,17 @@ fn compile_line(l:str) -> result<[u16],str> {
     let args = str::concat(parts).split_char(',');
 
     if cmd == "JSR" {
-        // TODO 
+        if args.len() != 1u {
+            ret err("wrong number of arguments for JSR");
+        }
+        ret result::chain(make_val(args[0])) { |t|
+            let v = (t[0] << 10u16) | 0b10000u16;
+            if t.len() == 2u {
+                result::ok([v, t[1]])
+            } else {
+                result::ok([v])
+            }
+        }
     } else {
 
         let mut word : u16 = 0u16;
@@ -156,8 +166,6 @@ fn compile_line(l:str) -> result<[u16],str> {
 
         ret result::ok(final);
     }
-    
-    ret err("not implemented");
 }
 
 fn compile_file(filename: str)
