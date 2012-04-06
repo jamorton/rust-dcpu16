@@ -30,6 +30,10 @@ fn parse_reg(p:u8) -> result<u16, str> {
     } as u16)
 }
 
+fn remove_brackets(v: str) -> str {
+    str::replace(str::replace(v, "[", ""), "]", "")
+}
+
 // Parse an argument to an opcode
 fn make_val(part:str) -> result<[u16], str> {
 
@@ -37,7 +41,7 @@ fn make_val(part:str) -> result<[u16], str> {
       "POP"  { ret result::ok([0x18u16]); } "PEEK" { ret result::ok([0x19u16]); }
       "PUSH" { ret result::ok([0x1Au16]); } "SP"   { ret result::ok([0x1Bu16]); }
       "PC"   { ret result::ok([0x1Cu16]); } "O"    { ret result::ok([0x1Du16]); }
-      _ { }
+      _      { }
     }
 
     // 'A'
@@ -52,18 +56,16 @@ fn make_val(part:str) -> result<[u16], str> {
 
     // '[0x1000 + a]'
     if !str::find_char(part, '+').is_none() {
-        let v = str::replace(str::replace(part, "[", ""), "]", "").split_char('+');
+        let v = remove_brackets(part).split_char('+');
+
         let (reg, word) = if str::find_str(v[0], "0x").is_none() {
-            if (str::len(v[0]) != 1u) {
-                ret err("expected register");
-            }
+            if (str::len(v[0]) != 1u) { ret err("expected register"); }
             (parse_reg(v[0][0]), parse_num(v[1]))
         } else {
-            if (str::len(v[1]) != 1u) {
-                ret err("expected register");
-            }
+            if (str::len(v[1]) != 1u) { ret err("expected register"); }
             (parse_reg(v[1][0]), parse_num(v[0]))
         };
+        
         if reg.is_failure() { ret err(reg.get_err()); }
         if word.is_failure() { ret err(word.get_err()); }
         ret result::ok([reg.get() + 0x10u16, word.get()]);
@@ -71,7 +73,7 @@ fn make_val(part:str) -> result<[u16], str> {
 
     // '[0x1000]'
     if !str::find_char(part, '[').is_none() {
-        ret result::chain(parse_num(str::replace(str::replace(part, "[", ""), "]", ""))) { |t|
+        ret result::chain(parse_num(remove_brackets(part))) { |t|
             result::ok([0x1Eu16, t])
         }
     }
