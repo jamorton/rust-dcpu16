@@ -1,7 +1,0 @@
-    SET I, 0xa
-    SET A, 0x2000
-    SET [0x2000+I], [A]
-    SUB I, 0x1
-    IFN I, 0x0
-    SET PC, 0x4
-    

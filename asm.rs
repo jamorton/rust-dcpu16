@@ -1,29 +1,68 @@
 
 import io::reader_util;
-import result::result;
-import result::err;
-import result::extensions;
+import result::{result, err, ok, extensions};
+
+enum value {
+    value_data1(u16),      // basic value data
+    value_data2(u16, u16), // for the 'next word' constructs
+    value_label(str)       // labels to be patched later
+}
+
+fn value_str(v: value) -> str {
+    alt v {
+      value_data1(a)    { uint::to_str(a as uint, 16u) }
+      value_data2(a, b) {
+        uint::to_str(a as uint, 16u) + " " + uint::to_str(b as uint, 16u)
+      }
+      value_label(a)    { a }
+    }
+}
+
+type instruction = {
+    mut o : u16,
+    mut a : value,
+    mut b : value
+};
+
+fn new_instruction(o: u16, a: value, b: value) -> instruction {
+    {
+        mut o: o,
+        mut a: a,
+        mut b: b
+    }
+}
+
+fn print_instruction(i: instruction) {
+    io::println(#fmt("%x %s %s", i.o as uint, value_str(i.a), value_str(i.b)));
+}
+
+fn to_bytes(p:str) -> [u8] {
+    let mut buf : [u8] = [];
+    for p.each {|t| vec::push(buf, t)};
+    buf
+}
 
 // Parse a hexadecimal number
 fn parse_num(p:str) -> result<u16, str> {
     if str::find_str(p, "0x").is_none() {
         ret err("expecting 0x");
     }
-    let mut buf : [u8] = [];
-    for str::replace(p, "0x", "").each {|t| vec::push(buf, t as u8); };
-    let num = uint::parse_buf(buf, 16u);
-    if num.is_none() {
-        ret err("invalid number");
-    }
-    if num.get() > 0xFFFFu {
-        ret err("constant too large");
-    }
-    ret result::ok(num.get() as u16);
+    
+    let num = if p.starts_with("0x") {
+        uint::parse_buf(to_bytes(str::replace(p, "0x", "")), 16u)
+    } else {
+        uint::parse_buf(to_bytes(p), 10u)
+    };
+    
+    if num.is_none()       { ret err("invalid number"); }
+    if num.get() > 0xFFFFu { ret err("constant too large"); }
+    
+    ret ok(num.get() as u16);
 }
 
 // return the ID associated with a register
 fn parse_reg(p:u8) -> result<u16, str> {
-    result::ok(alt p as char {
+    ok(alt p as char {
       'A' { 0 } 'B' { 1 } 'C' { 2 } 'X' { 3 }
       'Y' { 4 } 'Z' { 5 } 'I' { 6 } 'J' { 7 }
       _   { ret err("invalid register name"); }
@@ -35,61 +74,81 @@ fn remove_brackets(v: str) -> str {
 }
 
 // Parse an argument to an opcode
-fn make_val(part:str) -> result<[u16], str> {
+fn make_val(part:str) -> result<value, str> {
 
+    // simple values
     alt part {
-      "POP"  { ret result::ok([0x18u16]); } "PEEK" { ret result::ok([0x19u16]); }
-      "PUSH" { ret result::ok([0x1Au16]); } "SP"   { ret result::ok([0x1Bu16]); }
-      "PC"   { ret result::ok([0x1Cu16]); } "O"    { ret result::ok([0x1Du16]); }
+      "POP"  { ret ok(value_data1(0x18u16)); }
+      "PEEK" { ret ok(value_data1(0x19u16)); }
+      "PUSH" { ret ok(value_data1(0x1Au16)); }
+      "SP"   { ret ok(value_data1(0x1Bu16)); }
+      "PC"   { ret ok(value_data1(0x1Cu16)); }
+      "O"    { ret ok(value_data1(0x1Du16)); }
       _      { }
     }
 
-    // 'A'
+    // register
     if part.len() == 1u {
-        ret result::chain(parse_reg(part[0])) { |t|  result::ok([t]) };
+        ret result::chain(parse_reg(part[0])) { |t|
+            ok(value_data1(t))
+        };
     }
 
-    // '[A]'
+    // [register]
     if part.len() == 3u && part[0] == ('[' as u8) && part[2] == (']' as u8) {
-        ret result::chain(parse_reg(part[1])) { |t| result::ok([t + 0x08u16]) };
+        ret result::chain(parse_reg(part[1])) { |t|
+            ok(value_data1(t + 0x08u16))
+        };
     }
 
-    // '[0x1000 + a]'
+    // [next word + register]
     if !str::find_char(part, '+').is_none() {
         let v = remove_brackets(part).split_char('+');
-
-        let (reg, word) = if str::find_str(v[0], "0x").is_none() {
-            if (str::len(v[0]) != 1u) { ret err("expected register"); }
-            (parse_reg(v[0][0]), parse_num(v[1]))
+        let left =  v[0];
+        let right = v[1];
+        
+        if left.len() != 1u || right.len() != 1u {
+            ret err("expected register");
+        }
+        
+        let (reg, word) = if !char::is_digit(str::char_at(left, 0u)) {
+            // reg + num
+            (parse_reg(left[0]), parse_num(right))
+            
         } else {
-            if (str::len(v[1]) != 1u) { ret err("expected register"); }
-            (parse_reg(v[1][0]), parse_num(v[0]))
+            // num + reg 
+            (parse_reg(right[0]), parse_num(left))
         };
         
         if reg.is_failure() { ret err(reg.get_err()); }
         if word.is_failure() { ret err(word.get_err()); }
-        ret result::ok([reg.get() + 0x10u16, word.get()]);
+        ret ok(value_data2(reg.get() + 0x10u16, word.get()));
     }
 
-    // '[0x1000]'
+    // [next word]
     if !str::find_char(part, '[').is_none() {
         ret result::chain(parse_num(remove_brackets(part))) { |t|
-            result::ok([0x1Eu16, t])
+            ok(value_data2(0x1Eu16, t))
         }
     }
 
-    // '0x1000'
-    ret result::chain(parse_num(part)) { |t|
-        if t <= 0x1Fu16 {
-            result::ok([0x20u16 + t])
-        } else {
-            result::ok([0x1Fu16, t])
+    // next word literal or inline literal
+    if char::is_digit(str::char_at(part, 0u)) {
+        ret result::chain(parse_num(part)) { |t|
+            if t <= 0x1Fu16 {
+                ok(value_data1(0x20u16 + t))
+            } else {
+                ok(value_data2(0x1Fu16, t))
+            }
         }
+    // label
+    } else {
+        ret ok(value_label(part))
     }
 }
 
 fn get_op(cmd:str) -> result<u16,str> {
-    result::ok(alt cmd {
+    ok(alt cmd {
       "SET" { 1 }
       "ADD" { 2 }
       "SUB" { 3 }
@@ -109,13 +168,7 @@ fn get_op(cmd:str) -> result<u16,str> {
     } as u16)
 }
 
-fn compile_line(l:str) -> result<[u16],str> {
-    let mut line = str::trim(l);
-    let comment = str::find_char(line, ';');
-    if !comment.is_none() {
-        line = str::trim(str::substr(line, 0u, comment.get()));
-    }
-    if line.is_empty() { ret result::ok([]); }
+fn compile_line(line:str) -> result<instruction,str> {
 
     let mut parts = str::words(line);
     let cmd = vec::shift(parts);
@@ -126,45 +179,22 @@ fn compile_line(l:str) -> result<[u16],str> {
             ret err("wrong number of arguments for JSR");
         }
         ret result::chain(make_val(args[0])) { |t|
-            let v = (t[0] << 10u16) | 0b10000u16;
-            if t.len() == 2u {
-                result::ok([v, t[1]])
-            } else {
-                result::ok([v])
-            }
+            ok(new_instruction(0u16, value_data1(1u16), t))
         }
     } else {
 
-        let mut word : u16 = 0u16;
-        let mut final : [u16] = [];
-        let k = get_op(cmd);
-        if k.is_failure() { ret err(k.get_err()); }
-        word |= k.get();
-        
         if args.len() != 2u {
             ret err("wrong number of arguments");
         }
+
+        let op = get_op(cmd);
+        let a  = make_val(args[0]);
+        let b  = make_val(args[1]);
+        if a.is_failure()  { ret err(a.get_err()); }
+        if b.is_failure()  { ret err(b.get_err()); }
+        if op.is_failure() { ret err(op.get_err()); }
         
-        let a = make_val(args[0]);
-        let b = make_val(args[1]);
-        if a.is_failure() { ret err(a.get_err()); }
-        if b.is_failure() { ret err(b.get_err()); }
-
-        let av = a.get();
-        let bv = b.get();
-
-        word |= (av[0] & 0b111111u16) << 4u16;
-        word |= (bv[0] & 0b111111u16) << 10u16;
-        vec::push(final, word);
-
-        if av.len() == 2u {
-            vec::push(final, av[1]);
-        }
-        if bv.len() == 2u {
-            vec::push(final, bv[1]);
-        }
-
-        ret result::ok(final);
+        ret ok(new_instruction(op.get(), a.get(), b.get()));
     }
 }
 
@@ -175,23 +205,35 @@ fn compile_file(filename: str)
         io::println("could not open file");
     }
 
-    let mut out : [u16] = [];
+    let mut instrs : [instruction] = [];
     let mut n = 0u;
     let rdr = r.get();
     
     while !rdr.eof() {
+        let mut line = str::trim(rdr.read_line());
+
+        let comment = str::find_char(line, ';');
+        if !comment.is_none() {
+            line = str::trim(str::substr(line, 0u, comment.get()));
+        }
+        if line.is_empty() { cont; }
+
+        if str::find_char(line, ':')
+        
         n += 1u;
-        let line = rdr.read_line();
         let res = compile_line(line);
 
         if res.is_failure() {
             io::println(#fmt("Compile error: %s on line %u", res.get_err(), n));
             ret;
         }
-        
-        for res.get().each { |t| vec::push(out, t); }
+
+        vec::push(instrs, res.get());
     }
 
+    for instrs.each {|i| print_instruction(i)};
+
+    /*
     io::println("rust-dcpu-16 generated ROM");
     io::println("{{");
 
@@ -202,6 +244,7 @@ fn compile_file(filename: str)
     }
     
     io::println("}}");
+    */
 }
 
 fn main(args: [str]) {
