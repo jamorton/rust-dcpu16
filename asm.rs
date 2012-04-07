@@ -46,8 +46,11 @@ fn make_val(part:str) -> result<[u16], str> {
       _ { }
     }
 
-    if part.len() == 1u {
-        ret result::chain(parse_reg(part[0])) { |t|  result::ok([t]) };
+    let reg_res = result::chain(parse_reg(part[0])) { |t| result::ok([t]) };
+    if result::is_success(reg_res) {
+        ret reg_res;
+    } else {
+        #debug("didn't parse a reg: %?", reg_res);
     }
 
     if part.len() == 3u && part[0] == ('[' as u8) && part[2] == (']' as u8) {
