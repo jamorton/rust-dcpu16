@@ -75,7 +75,7 @@ fn remove_brackets(v: str) -> str {
     str::replace(str::replace(v, "[", ""), "]", "")
 }
 
-// Parse an argument to an opcode
+// Parse an instruction argument
 fn make_val(part:str) -> result<value, str> {
 
     // simple values
@@ -139,7 +139,12 @@ fn make_val(part:str) -> result<value, str> {
         }
     // label
     } else {
-        ret ok(value_label(part))
+        if part.any({ |c|
+            !(char::is_alphanumeric(c) || c == '_' || c == '-' || c == '$')
+        }) {
+            ret err("Expected label (letters, numbers, _, -, or $)");
+        }
+        ret ok(value_label(part));
     }
 }
 
