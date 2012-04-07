@@ -54,10 +54,10 @@ fn parse_num(p:str) -> result<u16, str> {
         uint::parse_buf(buf, 10u)
     };
     if num.is_none() {
-        ret err("invalid number");
+        ret err("Invalid integer literal");
     }
     if num.get() > 0xFFFFu {
-        ret err("constant too large");
+        ret err("Integer literal too large (max 0xFFFF)");
     }
     ret result::ok(num.get() as u16);
 }
@@ -67,7 +67,7 @@ fn parse_reg(p:u8) -> result<u16, str> {
     ok(alt p as char {
       'A' { 0 } 'B' { 1 } 'C' { 2 } 'X' { 3 }
       'Y' { 4 } 'Z' { 5 } 'I' { 6 } 'J' { 7 }
-      _   { ret err("invalid register name"); }
+      _   { ret err("Invalid register name"); }
     } as u16)
 }
 
@@ -172,7 +172,7 @@ fn compile_line(line:str) -> result<instruction,str> {
 
     if cmd == "JSR" {
         if args.len() != 1u {
-            ret err("wrong number of arguments for JSR");
+            ret err("Wrong number of arguments for JSR");
         }
         ret result::chain(make_val(args[0])) { |t|
             ok(new_instruction(0u16, value_data1(1u16), t))
@@ -180,7 +180,7 @@ fn compile_line(line:str) -> result<instruction,str> {
     } else {
 
         if args.len() != 2u {
-            ret err("wrong number of arguments");
+            ret err("Wrong number of arguments (expected 2)");
         }
 
         let op = get_op(cmd);
@@ -198,15 +198,18 @@ fn compile_file(filename: str)
 {
     let r = io::file_reader(filename);
     if r.is_failure() {
-        io::println("could not open file");
+        io::println("Could not open specified file");
+        ret
     }
 
     let mut instrs : [instruction] = [];
-    let mut n = 0u;
+    let mut line_no = 0u;
+    let mut instr_no = 0u;
     let rdr = r.get();
 
     while !rdr.eof() {
         let mut line = str::trim(rdr.read_line());
+        line_no += 1u;
 
         let comment = str::find_char(line, ';');
         if !comment.is_none() {
@@ -214,11 +217,12 @@ fn compile_file(filename: str)
         }
         if line.is_empty() { cont; }
 
-        n += 1u;
         let res = compile_line(line);
+        instr_no += 1u;
 
         if res.is_failure() {
-            io::println(#fmt("Compile error: %s on line %u", res.get_err(), n));
+            io::println(#fmt("Compile error on line %u: %s",
+                             line_no, res.get_err()));
             ret;
         }
 
