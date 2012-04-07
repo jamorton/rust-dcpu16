@@ -115,16 +115,10 @@ fn make_val(part:str) -> result<value, str> {
         let left =  v[0];
         let right = v[1];
 
-        if left.len() != 1u || right.len() != 1u {
-            ret err("expected register");
-        }
-
         let (reg, word) = if !is_num(left) {
-            // reg + num
-            (parse_reg(left[0]), parse_num(right))
+            (parse_reg(left[0]), parse_num(right)) // reg + num
         } else {
-            // num + reg
-            (parse_reg(right[0]), parse_num(left))
+            (parse_reg(right[0]), parse_num(left)) // num + reg
         };
 
         if reg.is_failure() { ret err(reg.get_err()); }
