@@ -75,6 +75,12 @@ fn remove_brackets(v: str) -> str {
     str::replace(str::replace(v, "[", ""), "]", "")
 }
 
+fn valid_label(v: str) -> bool {
+    v.any { |c|
+        !(char::is_alphanumeric(c) || c == '_' || c == '-' || c == '$')
+    }
+}
+
 // Parse an instruction argument
 fn make_val(part:str) -> result<value, str> {
 
@@ -139,10 +145,8 @@ fn make_val(part:str) -> result<value, str> {
         }
     // label
     } else {
-        if part.any({ |c|
-            !(char::is_alphanumeric(c) || c == '_' || c == '-' || c == '$')
-        }) {
-            ret err("Expected label (letters, numbers, _, -, or $)");
+        if !valid_label(part) {
+            ret err("Expected valid label (letters, numbers, _, -, or $)");
         }
         ret ok(value_label(part));
     }
@@ -174,6 +178,8 @@ fn compile_line(line:str) -> result<instruction,str> {
     let mut parts = str::words(line);
     let cmd = vec::shift(parts);
     let args = str::concat(parts).split_char(',');
+
+    if args.any ({|s| s.is_empty()}) { ret err("Empty argument"); }
 
     if cmd == "JSR" {
         if args.len() != 1u {
@@ -222,6 +228,11 @@ fn compile_file(filename: str)
         }
         if line.is_empty() { cont; }
 
+        let mut label = str::words(line)[0];
+        if str::pop_char(label) == ':' {
+
+        }
+
         let res = compile_line(line);
         instr_no += 1u;
 
@@ -251,7 +262,7 @@ fn compile_file(filename: str)
 }
 
 fn main(args: [str]) {
-    if (arg.len() != 2) {
+    if (args.len() != 2u) {
         io::println("Usage:");
         io::println("  ./asm [asm file]");
         ret;
