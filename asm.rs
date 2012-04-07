@@ -2,6 +2,7 @@
 import io::reader_util;
 import result::{result, err, ok, extensions};
 
+// An argument to an instruction
 enum value {
     value_data1(u16),      // basic value data
     value_data2(u16, u16), // for the 'next word' constructs
@@ -19,9 +20,9 @@ fn value_str(v: value) -> str {
 }
 
 type instruction = {
-    mut o : u16,
-    mut a : value,
-    mut b : value
+    mut o : u16,   // opcode
+    mut a : value, // argument 1 (a)
+    mut b : value  // argument 2 (b)
 };
 
 fn new_instruction(o: u16, a: value, b: value) -> instruction {
@@ -43,6 +44,7 @@ fn is_num(p: str) -> bool {
     digits.any {|d| p.trim().starts_with(d) }
 }
 
+// parse an interger literal, hex or decimal.
 fn parse_num(p:str) -> result<u16, str> {
     let num = if p.starts_with("0x") {
         let buf = str::bytes(str::replace(p, "0x", ""));
@@ -120,7 +122,7 @@ fn make_val(part:str) -> result<value, str> {
     }
 
     // [next word]
-    if !str::find_char(part, '[').is_none() {
+    if str::find_char(part, '[').is_some() {
         ret result::chain(parse_num(remove_brackets(part))) { |t|
             ok(value_data2(0x1Eu16, t))
         }
@@ -143,15 +145,15 @@ fn make_val(part:str) -> result<value, str> {
 
 fn get_op(cmd:str) -> result<u16,str> {
     ok(alt cmd {
-      "SET" { 1 }
-      "ADD" { 2 }
-      "SUB" { 3 }
-      "MUL" { 4 }
-      "DIV" { 5 }
-      "MOD" { 6 }
-      "SHL" { 7 }
-      "SHR" { 8 }
-      "AND" { 9 }
+      "SET" { 1  }
+      "ADD" { 2  }
+      "SUB" { 3  }
+      "MUL" { 4  }
+      "DIV" { 5  }
+      "MOD" { 6  }
+      "SHL" { 7  }
+      "SHR" { 8  }
+      "AND" { 9  }
       "BOR" { 10 }
       "XOR" { 11 }
       "IFE" { 12 }
