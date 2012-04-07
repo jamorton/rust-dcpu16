@@ -36,12 +36,6 @@ fn print_instruction(i: instruction) {
     io::println(#fmt("%x %s %s", i.o as uint, value_str(i.a), value_str(i.b)));
 }
 
-fn to_bytes(p:str) -> [u8] {
-    let mut buf : [u8] = [];
-    for p.each {|t| vec::push(buf, t)};
-    buf
-}
-
 fn is_num(p: str) -> bool {
     import iter::*;
     let digits = iter::to_vec(uint::range(0u, 9u, _));
@@ -51,8 +45,7 @@ fn is_num(p: str) -> bool {
 
 fn parse_num(p:str) -> result<u16, str> {
     let num = if p.starts_with("0x") {
-        let mut buf : [u8] = [];
-        for str::replace(p, "0x", "").each {|t| vec::push(buf, t as u8); };
+        let buf = str::bytes(str::replace(p, "0x", ""));
         uint::parse_buf(buf, 16u)
     } else {
         let buf = str::bytes(p);
