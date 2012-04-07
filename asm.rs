@@ -251,6 +251,11 @@ fn compile_file(filename: str)
 }
 
 fn main(args: [str]) {
-    compile_file(args[1]);
+    if (arg.len() != 2) {
+        io::println("Usage:");
+        io::println("  ./asm [asm file]");
+        ret;
+    }
 
+    compile_file(args[1]);
 }
