@@ -4,13 +4,22 @@ import result::result;
 import result::err;
 import result::extensions;
 
+fn is_num(p: str) -> bool {
+    import iter::*;
+    let digits = iter::to_vec(uint::range(0u, 9u, _));
+    let digits = digits.map {|d| #fmt("%u", d) };
+    digits.any {|d| p.trim().starts_with(d) }
+}
+
 fn parse_num(p:str) -> result<u16, str> {
-    if str::find_str(p, "0x").is_none() {
-        ret err("expecting 0x");
-    }
-    let mut buf : [u8] = [];
-    for str::replace(p, "0x", "").each {|t| vec::push(buf, t as u8); };
-    let num = uint::parse_buf(buf, 16u);
+    let num = if str::find_str(p, "0x").is_some() {
+        let mut buf : [u8] = [];
+        for str::replace(p, "0x", "").each {|t| vec::push(buf, t as u8); };
+        uint::parse_buf(buf, 16u)
+    } else {
+        let buf = str::bytes(p);
+        uint::parse_buf(buf, 10u)
+    };
     if num.is_none() {
         ret err("invalid number");
     }
@@ -37,8 +46,11 @@ fn make_val(part:str) -> result<[u16], str> {
       _ { }
     }
 
-    if part.len() == 1u {
-        ret result::chain(parse_reg(part[0])) { |t|  result::ok([t]) };
+    let reg_res = result::chain(parse_reg(part[0])) { |t| result::ok([t]) };
+    if result::is_success(reg_res) {
+        ret reg_res;
+    } else {
+        #debug("didn't parse a reg: %?", reg_res);
     }
 
     if part.len() == 3u && part[0] == ('[' as u8) && part[2] == (']' as u8) {
@@ -47,7 +59,7 @@ fn make_val(part:str) -> result<[u16], str> {
 
     if !str::find_char(part, '+').is_none() {
         let v = str::replace(str::replace(part, "[", ""), "]", "").split_char('+');
-        let (reg, word) = if str::find_str(v[0], "0x").is_none() {
+        let (reg, word) = if !is_num(v[0]) {
             if (str::len(v[0]) != 1u) {
                 ret err("expected register");
             }
