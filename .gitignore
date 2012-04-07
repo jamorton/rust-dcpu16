@@ -1,4 +1,7 @@
+test.rs
+asm
 *.dSYM
 test
 emu
 *.o
+*.rom
