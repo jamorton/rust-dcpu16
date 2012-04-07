@@ -127,7 +127,7 @@ fn make_val(part:str) -> result<value, str> {
     }
 
     // next word literal or inline literal
-    if char::is_digit(str::char_at(part, 0u)) {
+    if is_num(part) {
         ret result::chain(parse_num(part)) { |t|
             if t <= 0x1Fu16 {
                 ok(value_data1(0x20u16 + t))
