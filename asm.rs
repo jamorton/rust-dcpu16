@@ -42,22 +42,29 @@ fn to_bytes(p:str) -> [u8] {
     buf
 }
 
-// Parse a hexadecimal number
+fn is_num(p: str) -> bool {
+    import iter::*;
+    let digits = iter::to_vec(uint::range(0u, 9u, _));
+    let digits = digits.map {|d| #fmt("%u", d) };
+    digits.any {|d| p.trim().starts_with(d) }
+}
+
 fn parse_num(p:str) -> result<u16, str> {
-    if str::find_str(p, "0x").is_none() {
-        ret err("expecting 0x");
-    }
-    
     let num = if p.starts_with("0x") {
-        uint::parse_buf(to_bytes(str::replace(p, "0x", "")), 16u)
+        let mut buf : [u8] = [];
+        for str::replace(p, "0x", "").each {|t| vec::push(buf, t as u8); };
+        uint::parse_buf(buf, 16u)
     } else {
-        uint::parse_buf(to_bytes(p), 10u)
+        let buf = str::bytes(p);
+        uint::parse_buf(buf, 10u)
     };
-    
-    if num.is_none()       { ret err("invalid number"); }
-    if num.get() > 0xFFFFu { ret err("constant too large"); }
-    
-    ret ok(num.get() as u16);
+    if num.is_none() {
+        ret err("invalid number");
+    }
+    if num.get() > 0xFFFFu {
+        ret err("constant too large");
+    }
+    ret result::ok(num.get() as u16);
 }
 
 // return the ID associated with a register
@@ -88,10 +95,11 @@ fn make_val(part:str) -> result<value, str> {
     }
 
     // register
-    if part.len() == 1u {
-        ret result::chain(parse_reg(part[0])) { |t|
-            ok(value_data1(t))
-        };
+    let reg_res = result::chain(parse_reg(part[0])) { |t| ok(value_data1(t)) };
+    if result::is_success(reg_res) {
+        ret reg_res;
+    } else {
+        #debug("didn't parse a reg: %?", reg_res);
     }
 
     // [register]
@@ -106,20 +114,19 @@ fn make_val(part:str) -> result<value, str> {
         let v = remove_brackets(part).split_char('+');
         let left =  v[0];
         let right = v[1];
-        
+
         if left.len() != 1u || right.len() != 1u {
             ret err("expected register");
         }
-        
-        let (reg, word) = if !char::is_digit(str::char_at(left, 0u)) {
+
+        let (reg, word) = if !is_num(left) {
             // reg + num
             (parse_reg(left[0]), parse_num(right))
-            
         } else {
-            // num + reg 
+            // num + reg
             (parse_reg(right[0]), parse_num(left))
         };
-        
+
         if reg.is_failure() { ret err(reg.get_err()); }
         if word.is_failure() { ret err(word.get_err()); }
         ret ok(value_data2(reg.get() + 0x10u16, word.get()));
@@ -193,7 +200,7 @@ fn compile_line(line:str) -> result<instruction,str> {
         if a.is_failure()  { ret err(a.get_err()); }
         if b.is_failure()  { ret err(b.get_err()); }
         if op.is_failure() { ret err(op.get_err()); }
-        
+
         ret ok(new_instruction(op.get(), a.get(), b.get()));
     }
 }
@@ -208,7 +215,7 @@ fn compile_file(filename: str)
     let mut instrs : [instruction] = [];
     let mut n = 0u;
     let rdr = r.get();
-    
+
     while !rdr.eof() {
         let mut line = str::trim(rdr.read_line());
 
@@ -218,8 +225,6 @@ fn compile_file(filename: str)
         }
         if line.is_empty() { cont; }
 
-        if str::find_char(line, ':')
-        
         n += 1u;
         let res = compile_line(line);
 
@@ -242,7 +247,7 @@ fn compile_file(filename: str)
         iter::repeat(4u - hex.len()) {|| hex = "0" + hex};
         io::println("  " + hex);
     }
-    
+
     io::println("}}");
     */
 }
