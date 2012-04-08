@@ -1,6 +1,9 @@
 
+use std;
+
 import io::reader_util;
 import result::{result, err, ok, extensions};
+import std::map::hashmap;
 
 // An argument to an instruction
 enum value {
@@ -19,6 +22,14 @@ fn value_str(v: value) -> str {
     }
 }
 
+fn value_size(v: value) -> u16 {
+    alt v {
+      value_data1(_)    { 0u16 }
+      value_data2(_, _) { 1u16 }
+      value_label(_)    { 1u16 }
+    }
+}
+
 type instruction = {
     mut o : u16,   // opcode
     mut a : value, // argument 1 (a)
@@ -31,6 +42,26 @@ fn new_instruction(o: u16, a: value, b: value) -> instruction {
         mut a: a,
         mut b: b
     }
+}
+
+fn instruction_size(i: instruction) -> u16 {
+    value_size(i.a) + value_size(i.b) + 1u16
+}
+
+fn instruction_bytes(i: instruction) -> [u16] {
+    let mut first = i.o;
+    let mut bytes = [];
+    alt i.a {
+      value_data1(a)    { first |= a << 4u16; }
+      value_data2(a, b) { first |= a << 4u16; bytes += [b]; }
+      _ { }
+    }
+    alt i.b {
+      value_data1(a)    { first |= a << 10u16; }
+      value_data2(a, b) { first |= a << 10u16; bytes += [b]; }
+      _ { }
+    }
+    [first] + bytes
 }
 
 fn print_instruction(i: instruction) {
@@ -67,7 +98,7 @@ fn parse_reg(p:u8) -> result<u16, str> {
     ok(alt p as char {
       'A' { 0 } 'B' { 1 } 'C' { 2 } 'X' { 3 }
       'Y' { 4 } 'Z' { 5 } 'I' { 6 } 'J' { 7 }
-      _   { ret err("Invalid register name"); }
+      _   { ret err("Invalid register name " + str::from_char(p as char)); }
     } as u16)
 }
 
@@ -76,7 +107,8 @@ fn remove_brackets(v: str) -> str {
 }
 
 fn valid_label(v: str) -> bool {
-    v.any { |c|
+    if (v.len() == 0u) { ret false; }
+    !char::is_digit(str::char_at(v, 0u)) && !v.any { |c|
         !(char::is_alphanumeric(c) || c == '_' || c == '-' || c == '$')
     }
 }
@@ -175,6 +207,7 @@ fn get_op(cmd:str) -> result<u16,str> {
 
 fn compile_line(line:str) -> result<instruction,str> {
 
+    io::println("Line: " + line);
     let mut parts = str::words(line);
     let cmd = vec::shift(parts);
     let args = str::concat(parts).split_char(',');
@@ -205,6 +238,10 @@ fn compile_line(line:str) -> result<instruction,str> {
     }
 }
 
+fn perr(line: uint, msg: str) {
+    io::println(#fmt("Compile error on line %u: %s", line, msg));
+}
+
 fn compile_file(filename: str)
 {
     let r = io::file_reader(filename);
@@ -213,9 +250,10 @@ fn compile_file(filename: str)
         ret
     }
 
-    let mut instrs : [instruction] = [];
+    let mut instrs : [mut instruction] = [mut];
     let mut line_no = 0u;
-    let mut instr_no = 0u;
+    let mut word_no = 0u16;
+    let labels = std::map::hashmap::<str, u16>(str::hash, str::eq);
     let rdr = r.get();
 
     while !rdr.eof() {
@@ -230,35 +268,62 @@ fn compile_file(filename: str)
 
         let mut label = str::words(line)[0];
         if str::pop_char(label) == ':' {
-
+            if !valid_label(label) {
+                perr(line_no, "invalid label definition");
+                ret;
+            }
+            labels.insert(label, word_no);
+            line = line.split_char(':')[1].trim();
         }
+
+        if line.is_empty() { cont; }
 
         let res = compile_line(line);
-        instr_no += 1u;
 
         if res.is_failure() {
-            io::println(#fmt("Compile error on line %u: %s",
-                             line_no, res.get_err()));
+            perr(line_no, res.get_err());
             ret;
         }
+
+
+        word_no += instruction_size(res.get());
 
         vec::push(instrs, res.get());
     }
 
-    for instrs.each {|i| print_instruction(i)};
+    io::println("Done parsing");
 
-    /*
+    for instrs.each {|i|
+        let k = [i.a, i.b];
+        let f = vec::map(k) {|v|
+            alt v {
+              value_label(a) {
+                if !labels.contains_key(a) {
+                    perr(line_no, "invalid label reference");
+                }
+                value_data2(0x1fu16, labels.get(a))
+              }
+              _ { v }
+            }
+        };
+        i.a = f[0]; i.b = f[1];
+    }
+
+    let mut bytes : [u16] = [];
+    for instrs.each {|i|
+        bytes += instruction_bytes(i);
+    };
+
     io::println("rust-dcpu-16 generated ROM");
     io::println("{{");
 
-    for out.each { |num|
+    for bytes.each { |num|
         let mut hex = uint::to_str(num as uint, 16u);
         iter::repeat(4u - hex.len()) {|| hex = "0" + hex};
         io::println("  " + hex);
     }
 
     io::println("}}");
-    */
 }
 
 fn main(args: [str]) {
